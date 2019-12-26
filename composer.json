@@ -1,0 +1,17 @@
+{
+    "name": "hktk/poster",
+    "authors": [
+        {
+            "name": "hktk",
+            "email": "1106935565@qq.com"
+        }
+    ],
+    "require": {
+        "php": ">=7.0.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "poster\\": "src/"
+        }
+    }
+}
