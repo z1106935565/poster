@@ -21,15 +21,39 @@ class Poster
     const ERROR_CODE = 0;
 
     /**
+     * 创建固定尺寸的画布
+     *
      * @param int $canvas_width 画布宽度
      * @param int $canvas_height 画布高度
+     * @return self
      */
-    public function __construct(int $canvas_width, int $canvas_height)
+    public function createCanvas(int $canvas_width, int $canvas_height, int $red = null, int $green = null, int $blue = null): self
     {
         $this->canvas_width = $canvas_width;
         $this->canvas_height = $canvas_height;
 
-        $this->createCanvas();
+        $this->image = imagecreatetruecolor($canvas_width, $canvas_height);
+
+        if ($red !== null && $green !== null && $blue !== null) {
+            imagefill($this->image, 0, 0, imagecolorallocate($this->image, $red, $green, $blue));
+        }
+
+        return $this;
+    }
+
+    /**
+     * 根据指定图片创建画布
+     *
+     * @param string $path 图片路径
+     * @return self
+     */
+    public function createCanvasByImage(string $path): self
+    {
+        $this->image = $this->createResource($path);
+        $this->canvas_width = imagesx($this->image);
+        $this->canvas_height = imagesy($this->image);
+
+        return $this;
     }
 
     /**
@@ -45,39 +69,6 @@ class Poster
     }
 
     /**
-     * 创建画布
-     *
-     * @return self
-     */
-    private function createCanvas()
-    {
-        $image = imagecreatetruecolor($this->canvas_width, $this->canvas_height);
-
-        if ($image) {
-            $this->image = $image;
-        } else {
-            throw new Exception('画布创建失败', self::ERROR_CODE);
-        }
-    }
-
-    /**
-     * 设置纯色背景
-     *
-     * @param int $red 红色
-     * @param int $green 绿色
-     * @param int $blue 蓝色
-     * @param int $alpha 透明度,0-127,0表示完全不透明
-     * @return self
-     */
-    public function setBackground(int $red, int $green, int $blue, int $alpha = 0): self
-    {
-        $color = imagecolorallocatealpha($this->image, $red, $green, $blue, $alpha);
-        imagefill($this->image, 0, 0, $color);
-
-        return $this;
-    }
-
-    /**
      * 设置文本
      *
      * @param int $size 字体大小
@@ -89,7 +80,7 @@ class Poster
      * @param string $text 字符串
      * @return self
      */
-    public function setText(int $size, $x, int $y, int $color, string $font_path, int $max_width = 0, string $text): self
+    public function setText(int $size, $x, int $y, int $color, string $font_path, int $max_width = null, string $text): self
     {
         if (file_exists($font_path)) {
             //增加额外的Y轴
@@ -97,16 +88,12 @@ class Poster
             //将路径设置为绝对路径
             $font_file_info = pathinfo($font_path);
             $font_file = $_SERVER['DOCUMENT_ROOT'] .'/' . $font_file_info['dirname'] . '/' . $font_file_info['basename'];
-
             //获取字符串宽度
             $box_info = imagettfbbox($size, 0, $font_file, $text);
             //字符串高度
             $text_h = $box_info[1] - $box_info[7]; //左上角Y - 左下角Y
-
             //计算字符串运行的最大宽度
-            $max_width = $max_width > $this->canvas_width || $max_width == 0 ? $this->canvas_width : $max_width;
-            //$max_width = (string)$x !== 'center' && $max_width + $x > $this->canvas_width ? $$this->canvas_width - $x : $max_width;
-
+            $max_width = $max_width !== null && $max_width > $this->canvas_width ? $this->canvas_width : $max_width;
             //字符串分段数组
             $text_array = [];
             //字符串字数
@@ -157,7 +144,6 @@ class Poster
         }
 
         return $this;
-
     }
 
     /**
@@ -172,27 +158,7 @@ class Poster
      */
     public function setImg(string $path, $dst_x = 0, $dst_y = 0, $src_w = 0, $src_h = 0): self
     {
-        //获取文件后缀
-        $suffix = pathinfo($path, PATHINFO_EXTENSION);
-        //创建图像资源
-        switch ($suffix) {
-            case 'jpg':
-                $image = imagecreatefromjpeg($path);
-                break;
-            case 'jpeg':
-                $image = imagecreatefromjpeg($path);
-                break;
-            case 'png':
-                $image = imagecreatefrompng($path);
-                break;
-            case 'gif':
-                $image = imagecreatefromgif($path);
-                break;
-            default:
-                $image = imagecreatefrompng($path);
-                break;
-        }
-
+        $image = $this->createResource($path);
         //获取图像宽高
         $image_width    = imagesx($image);
         $image_height   = imagesy($image);
@@ -202,7 +168,6 @@ class Poster
         if ($src_h == 0) {
             $src_h = floor($image_height / $image_width * $src_w);
         }
-
         //计算X轴
         if (is_string($dst_x)) {
             switch ($dst_x) {
@@ -214,7 +179,6 @@ class Poster
                     break;
             }
         }
-
         //计算Y轴
         if (is_string($dst_y)) {
             switch ($dst_y) {
@@ -226,10 +190,8 @@ class Poster
                     break;
             }
         }
-
         //增加额外的Y轴
         $dst_y += $this->y;
-
         //拷贝图片
         if ($src_w) {
             //等比缩小拷贝
@@ -238,6 +200,7 @@ class Poster
             //原始比例拷贝
             imagecopy($this->image, $image, $dst_x, $dst_y, 0, 0, $image_width, $image_height);
         }
+        imagedestroy($image);
 
         return $this;
     }
@@ -261,6 +224,38 @@ class Poster
             imagepng($this->image);
             imagedestroy($this->image);
             exit;
+        }
+    }
+
+    /**
+     * 根据图片路径或图片流字符串创建图像资源
+     * 
+     * @param string $path
+     * @return void
+     */
+    private function createResource(string $path)
+    {
+        try {
+            //获取文件后缀
+            $suffix = pathinfo($path, PATHINFO_EXTENSION);
+            //创建图像资源
+            switch ($suffix) {
+                case 'jpg':
+                    $image = imagecreatefromjpeg($path);
+                    break;
+                case 'png':
+                    $image = imagecreatefrompng($path);
+                    break;
+                case 'gif':
+                    $image = imagecreatefromgif($path);
+                    break;
+                default:
+                    $image = imagecreatefromstring($path);
+                    break;
+            }
+            return $image;
+        } catch (Exception $e) {
+            throw new Exception('创建失败', self::ERROR_CODE);
         }
     }
 
